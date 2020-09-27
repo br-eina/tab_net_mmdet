@@ -9,5 +9,11 @@ annotations/annotators/Label_IMG_Annotator/*
 annotations/annotators/VGG_Image_Annotator/*
 !annotations/annotators/VGG_Image_Annotator/README.md
 
-# Exclude mmdetection folder
+# Exclude mmdetection folder:
 mmdetection/*
+
+# Exclude detections and groundtruths for icdar19:
+object_detection_metrics/icdar19/*
+
+# Exclude metric results:
+results/metrics/*
