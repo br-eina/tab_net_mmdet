@@ -8,3 +8,6 @@ annotations/annotators/Label_IMG_Annotator/*
 
 annotations/annotators/VGG_Image_Annotator/*
 !annotations/annotators/VGG_Image_Annotator/README.md
+
+# Exclude mmdetection folder
+mmdetection/*
