@@ -1,0 +1,26 @@
+<annotation>
+	<folder>docs</folder>
+	<filename>inv-0061.jpg</filename>
+	<path>/home/bruenor/pr/tab_net/CUSTOM/1C_dataset/docs/inv-0061.jpg</path>
+	<source>
+		<database>Unknown</database>
+	</source>
+	<size>
+		<width>2338</width>
+		<height>1654</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>bordered</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>43</xmin>
+			<ymin>84</ymin>
+			<xmax>2279</xmax>
+			<ymax>809</ymax>
+		</bndbox>
+	</object>
+</annotation>

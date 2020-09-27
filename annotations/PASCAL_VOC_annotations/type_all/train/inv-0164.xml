@@ -1,0 +1,26 @@
+<annotation>
+	<folder>docs</folder>
+	<filename>inv-0164.jpg</filename>
+	<path>/home/bruenor/pr/tab_net/CUSTOM/1C_dataset/docs/inv-0164.jpg</path>
+	<source>
+		<database>Unknown</database>
+	</source>
+	<size>
+		<width>2340</width>
+		<height>1655</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>bordered</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>100</xmin>
+			<ymin>511</ymin>
+			<xmax>2241</xmax>
+			<ymax>964</ymax>
+		</bndbox>
+	</object>
+</annotation>
