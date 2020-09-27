@@ -1,0 +1,3 @@
+# Exclude insides of images folder:
+images/*
+!images/.gikeep
