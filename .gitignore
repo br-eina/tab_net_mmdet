@@ -1,3 +1,10 @@
-# Exclude insides of images folder:
+# Exclude insides of images/ folder:
 images/*
-!images/.gikeep
+!images/README.md
+
+# Exclude insides of annotators folder:
+annotations/annotators/Label_IMG_Annotator/*
+!annotations/annotators/Label_IMG_Annotator/README.md
+
+annotations/annotators/VGG_Image_Annotator/*
+!annotations/annotators/VGG_Image_Annotator/README.md
