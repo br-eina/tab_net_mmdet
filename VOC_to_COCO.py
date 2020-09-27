@@ -129,9 +129,9 @@ def main():
 	df_learn, df_unseen = train_test_split(df, train_size=0.8, stratify=df['img_type'], random_state=42)
 	df_train, df_test = train_test_split(df_learn, train_size=0.8, stratify=df_learn['img_type'], random_state=42)
 
-	img_list_train = list(df_train['filename'])
-	img_list_test = list(df_test['filename'])
-	img_list_unseen = list(df_unseen['filename'])
+	img_list_train = sorted(list(df_train['filename']))
+	img_list_test = sorted(list(df_test['filename']))
+	img_list_unseen = sorted(list(df_unseen['filename']))
 
 	xml_list_train = []
 	xml_list_test = []
@@ -174,10 +174,21 @@ def main():
 	coco_train_path = f'{coco_dir}coco_train.json'
 	coco_test_path = f'{coco_dir}coco_test.json'
 
+  	# Save COCO annotations for train and test splits:
 	with open(coco_train_path, 'w') as f:
-		f.write(coco_train)
-
+  		f.write(coco_train)
 	with open(coco_test_path, 'w') as f:
 		f.write(coco_test)
+
+	img_list_train_path = f'{coco_dir}train_list.json'
+	img_list_test_path = f'{coco_dir}test_list.json'
+	img_list_unseen_path = f'{coco_dir}unseen_list.json'
+	# Save lists with image_names for train/test/unseen splits:
+	with open(img_list_train_path, 'w') as f:
+		json.dump(img_list_train, f)
+	with open(img_list_test_path, 'w') as f:
+		json.dump(img_list_test, f)
+	with open(img_list_unseen_path, 'w') as f:
+		json.dump(img_list_unseen, f)
 
 main()
