@@ -50,9 +50,8 @@ All training process is done with Colab service. Colab is strongly integrated wi
 
 1. Place large-sized libs (*pytorch*, etc.) to the **libs/** Google Drive folder;
 1. Place pretrained models to the **pretrained_models/** Google Drive folder;
-2. Place document images dataset into **images/** Google Drive folder;
-3. Place corresponding (for *dataset_type*) **COCO Annotations** files *(coco_train.json / coco_test.json)* to the **training/{pretrained_model}/{dataset_type}/** Google Drive folder;
-4. Place corresponding (for *dataset_type*) **train/test/unseen** JSON lists of image_names (*test_list.json*, etc.) to the **training/{pretrained_model}/{dataset_type}/** Google Drive folder.
+3. Place document images dataset into **images/** Google Drive folder;
+4. Place the inners of **annotations/COCO_annotations/** project folder (**type_all**, **type_opl_fact**, **type_opl**) into the **training/{pretrained_model}/** Google Drive folder.
 
 ## 5. Start the training:
 Training is done through the Colab notebook with Google GPUs.
