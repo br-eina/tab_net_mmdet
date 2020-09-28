@@ -12,8 +12,9 @@ annotations/annotators/VGG_Image_Annotator/*
 # Exclude mmdetection folder:
 mmdetection/*
 
-# Exclude detections and groundtruths for icdar19:
+# Exclude detections and groundtruths for icdar19/13:
 object_detection_metrics/icdar19/*
+object_detection_metrics/icdar13/*
 
 # Exclude metric results:
 results/metrics/*
