@@ -9,28 +9,44 @@ from dash.dependencies import Input, Output
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-PRETR_EPOCH = 36
-ITER_STEP = 10
-ITER_PER_EPOCH = 101
+_DTYPE_ITERATIONS_PER_EPOCH = {
+    'type_all': 101,
+    'type_opl_fact': 84,
+    'type_opl': 58
+}
+_PRETR_MODEL_EPOCHS = {
+    'icdar19': 36,
+    'icdar13': 1
+}
+_DEF_TRAINING_EPOCHS = 6
+_ITER_STEP = 10
 
-df_path = 'results/df.pkl'
-df_doctypes_path = 'results/df_doctypes.pkl'
-df = pd.read_pickle(df_path)
-df_doctypes = pd.read_pickle(df_doctypes_path)
+_DF_METRICS_PATH = 'results/df_upd.pkl'
+_DF_DOCTYPES_PATH = 'results/df_doctypes.pkl'
 
-def get_log_stat(epoch, stat):
-    log_list = df[(df['epoch'] == epoch) & (df['evaluate'] == 'test')]['log'].values[0]
+df = pd.read_pickle(_DF_METRICS_PATH)
+df_doctypes = pd.read_pickle(_DF_DOCTYPES_PATH)
 
-    iter_start = PRETR_EPOCH * ITER_PER_EPOCH
-    iter_end = epoch * ITER_PER_EPOCH
+def get_log_stat(epoch, dataset_type, pretrained_model, stat):
+    log_list = df[(df['pretrained_model'] == pretrained_model) & (df['epoch'] == epoch) & (df['evaluate'] == 'test') & (df['dataset_type'] == dataset_type)]['log'].values[0]
+
+    iter_per_epoch = _DTYPE_ITERATIONS_PER_EPOCH[dataset_type]
+
+    pretr_epochs = _PRETR_MODEL_EPOCHS[pretrained_model]
+    total_epochs = pretr_epochs + _DEF_TRAINING_EPOCHS
+
+    iter_start = pretr_epochs * iter_per_epoch
+    iter_end = epoch * iter_per_epoch
+
+    final_iter_in_log = (iter_per_epoch // _ITER_STEP) * _ITER_STEP
 
     stat_list = []
     for log_line in log_list:
         stat_list.append(log_line[stat])
-        if log_line['epoch'] == epoch and log_line['iter'] == 100:
+        if log_line['epoch'] == epoch and log_line['iter'] == final_iter_in_log:
             break
 
-    iterations = np.arange(iter_start, iter_end, ITER_STEP)
+    iterations = np.arange(iter_start, iter_end, _ITER_STEP)
     stats = np.array(stat_list)
     return iterations, stats
 
@@ -138,10 +154,6 @@ app.layout = html.Div(children=[
                 dbc.Col(children=[
                     dcc.Slider(
                         id='epoch_slider',
-                        min=df['epoch'].min(),
-                        max=df['epoch'].max(),
-                        value=df['epoch'].min(),
-                        marks={str(epoch): str(epoch) for epoch in df['epoch'].unique()},
                         step=None
                     ),
                     html.Div('epoches',
@@ -161,22 +173,37 @@ app.layout = html.Div(children=[
 
 ])
 
+@app.callback(
+    [Output('epoch_slider', 'min'),
+     Output('epoch_slider', 'max'),
+     Output('epoch_slider', 'value'),
+     Output('epoch_slider', 'marks')],
+    [Input('pretr_model_radio', 'value')]
+)
+def set_epoch_slider(pretrained_model):
+    prop_min = _PRETR_MODEL_EPOCHS[pretrained_model]
+    prop_max = prop_min + _DEF_TRAINING_EPOCHS
+    prop_value = prop_min
+    prop_marks = {str(epoch): str(epoch) for epoch in range(prop_min, prop_max + 1)}
+    return prop_min, prop_max, prop_value, prop_marks
 
 @app.callback(
     Output('prec_rec', 'figure'),
     [Input('epoch_slider', 'value'),
-     Input('eval_checklist', 'value')]
+     Input('eval_checklist', 'value'),
+     Input('dataset_type_radio', 'value'),
+     Input('pretr_model_radio', 'value')]
 )
-def update_prec_rec(selected_epoch, eval_list):
+def update_prec_rec(selected_epoch, eval_list, dataset_type, pretrained_model):
     fig = go.Figure()
     ap_list = []
     for eval_type in eval_list:
-        precision = df[(df['epoch'] == selected_epoch) & (df['evaluate'] == eval_type)]['precision'].values[0]
-        recall = df[(df['epoch'] == selected_epoch) & (df['evaluate'] == eval_type)]['recall'].values[0]
+        precision = df[(df['pretrained_model'] == pretrained_model) & (df['dataset_type'] == dataset_type) & (df['epoch'] == selected_epoch) & (df['evaluate'] == eval_type)]['precision'].values[0]
+        recall = df[(df['pretrained_model'] == pretrained_model) & (df['dataset_type'] == dataset_type) & (df['epoch'] == selected_epoch) & (df['evaluate'] == eval_type)]['recall'].values[0]
         fig.add_trace(
             go.Scatter(x=recall, y=precision, name=eval_type)
         )
-        ap = df[(df['epoch'] == selected_epoch) & (df['evaluate'] == eval_type)]['ap'].values[0]
+        ap = df[(df['pretrained_model'] == pretrained_model) & (df['dataset_type'] == dataset_type) & (df['epoch'] == selected_epoch) & (df['evaluate'] == eval_type)]['ap'].values[0]
         ap_list.append(str(round(ap, 3)))
 
     fig.update_layout(title={'text': f'Precision x Recall curve <br>' \
@@ -222,37 +249,57 @@ def update_pie_chart(dataset_type):
 
 @app.callback(
     Output('loss', 'figure'),
-    [Input('epoch_slider', 'value')]
+    [Input('epoch_slider', 'value'),
+     Input('dataset_type_radio', 'value'),
+     Input('pretr_model_radio', 'value')]
 )
-def update_loss(selected_epoch):
+def update_loss(selected_epoch, dataset_type, pretrained_model):
     fig = go.Figure()
     if selected_epoch != 36:
-        iterations, loss = get_log_stat(selected_epoch, 'loss')
+        iterations, loss = get_log_stat(selected_epoch, dataset_type, pretrained_model, 'loss')
         fig = go.Figure(data=go.Scatter(x=iterations, y=loss))
     fig.update_layout(title={'text': 'Loss',
                              'x': 0.5,
                              'yanchor': 'top'},
                       xaxis_title='Iterations',
                       yaxis_title='Loss')
-    fig.update_xaxes(range=[PRETR_EPOCH * ITER_PER_EPOCH, 42 * ITER_PER_EPOCH])
+    iter_per_epoch = _DTYPE_ITERATIONS_PER_EPOCH[dataset_type]
+
+    pretr_epochs = _PRETR_MODEL_EPOCHS[pretrained_model]
+    total_epochs = pretr_epochs + _DEF_TRAINING_EPOCHS
+
+    iter_start = pretr_epochs * iter_per_epoch
+    iter_end = total_epochs * iter_per_epoch
+
+    fig.update_xaxes(range=[iter_start, iter_end])
     fig.update_yaxes(range=[0, 1.08])
     return fig
 
 @app.callback(
     Output('accuracy', 'figure'),
-    [Input('epoch_slider', 'value')]
+    [Input('epoch_slider', 'value'),
+     Input('dataset_type_radio', 'value'),
+     Input('pretr_model_radio', 'value')]
 )
-def update_accuracy(selected_epoch):
+def update_accuracy(selected_epoch, dataset_type, pretrained_model):
     fig = go.Figure()
     if selected_epoch != 36:
-        iterations, accuracy = get_log_stat(selected_epoch, 's0.acc')
+        iterations, accuracy = get_log_stat(selected_epoch, dataset_type, pretrained_model, 's0.acc')
         fig = go.Figure(data=go.Scatter(x=iterations, y=accuracy/100))
     fig.update_layout(title={'text': 'Accuracy',
                              'x': 0.5,
                              'yanchor': 'top'},
                       xaxis_title='Iterations',
                       yaxis_title='Accuracy')
-    fig.update_xaxes(range=[PRETR_EPOCH * ITER_PER_EPOCH, 42 * ITER_PER_EPOCH])
+    iter_per_epoch = _DTYPE_ITERATIONS_PER_EPOCH[dataset_type]
+
+    pretr_epochs = _PRETR_MODEL_EPOCHS[pretrained_model]
+    total_epochs = pretr_epochs + _DEF_TRAINING_EPOCHS
+
+    iter_start = pretr_epochs * iter_per_epoch
+    iter_end = total_epochs * iter_per_epoch
+
+    fig.update_xaxes(range=[iter_start, iter_end])
     fig.update_yaxes(range=[0.85, 1.01])
     return fig
 
