@@ -1,3 +1,7 @@
+# Exclude system files:
+.vscode/*
+**/__pycache__
+
 # Exclude insides of images/ folder:
 images/*
 !images/README.md
@@ -18,3 +22,7 @@ object_detection_metrics/icdar13/*
 
 # Exclude metric results:
 results/metrics/*
+
+# Exclude test files:
+parse_config.ipynb
+.ipynb_checkpoints/*
