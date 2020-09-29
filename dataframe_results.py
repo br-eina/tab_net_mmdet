@@ -96,6 +96,8 @@ def create_df_metrics(pretrained_model, dataset_type, train_epochs):
                 for log_line in total_log:
                     data_line['log'].append(log_line)
                     if log_line['epoch'] == epoch and log_line['iter'] == final_iter_in_log:
+                        data_line['loss'] = log_line['loss']
+                        data_line['accuracy'] = log_line['s0.acc'] / 100
                         break
             data_line['evaluate'] = eval_type
             data_line['precision'] = precision
