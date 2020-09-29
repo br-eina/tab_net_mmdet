@@ -1,3 +1,6 @@
+import base64
+import json
+from random import choice
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -5,7 +8,8 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
+import cv2
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
@@ -20,12 +24,15 @@ _PRETR_MODEL_EPOCHS = {
 }
 _DEF_TRAINING_EPOCHS = 6
 _ITER_STEP = 10
+_DETECTION_THRESH = 0.75
 
 _DF_METRICS_PATH = 'results/df_upd.pkl'
 _DF_DOCTYPES_PATH = 'results/df_doctypes.pkl'
 
 df = pd.read_pickle(_DF_METRICS_PATH)
 df_doctypes = pd.read_pickle(_DF_DOCTYPES_PATH)
+
+# image_path = 'images/inv-0000.jpg'
 
 def get_log_stat(epoch, dataset_type, pretrained_model, stat):
     log_list = df[(df['pretrained_model'] == pretrained_model) & (df['epoch'] == epoch) & (df['evaluate'] == 'test') & (df['dataset_type'] == dataset_type)]['log'].values[0]
@@ -112,6 +119,40 @@ app.layout = html.Div(children=[
                     ],
                     value=['unseen'],
                     labelStyle={'display': 'block'}
+                )
+            ],
+            style={'padding': '15px',
+                   'background-color': '#F8F8FF'}
+            ),
+            # Modal:
+            html.Div(children=[
+                html.H5('Table detection visualization:'),
+                dbc.RadioItems(
+                    id='random_image_type_selector',
+                    options=[
+                        {'label': 'train', 'value': 'train'},
+                        {'label': 'test', 'value': 'test'},
+                        {'label': 'unseen', 'value': 'unseen'}
+                    ],
+                    inline=True,
+                    value='unseen',
+                    style={'margin-bottom': '10px'}
+                ),
+                dbc.Button('Random image', id='open_random_image'),
+                dbc.Modal(
+                    [
+                        dbc.ModalHeader('Header'),
+                        dbc.ModalBody(
+                            html.Div(
+                                id='image'
+                            )
+                        ),
+                        dbc.ModalFooter(
+                            dbc.Button('Close', id='close', className='ml-auto')
+                        )
+                    ],
+                    id='modal',
+                    size="xl"
                 )
             ],
             style={'padding': '15px',
@@ -302,6 +343,70 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
     fig.update_xaxes(range=[iter_start, iter_end])
     fig.update_yaxes(range=[0.85, 1.01])
     return fig
+
+# Displaying selected image in modal_body Div:
+@app.callback(
+    Output('image', 'children'),
+    [Input('pretr_model_radio', 'value'),
+     Input('dataset_type_radio', 'value'),
+     Input('epoch_slider', 'value'),
+     Input('random_image_type_selector', 'value'),
+     Input('open_random_image', 'n_clicks')]
+)
+def display_modal_image(pretrained_model, dataset_type, selected_epoch, image_type, n_clicks):
+    metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
+    groundtruths_folder = f'{metrics_folder}/groundtruths_{image_type}/'
+    detections_folder = f'{metrics_folder}/detections/{selected_epoch}/{image_type}/'
+
+    imagenames_list = f'annotations/COCO_annotations/{dataset_type}/{image_type}_list.json'
+
+    with open(imagenames_list, 'r+') as f:
+        image_names = json.load(f)
+    image_name = choice(image_names).split('.')[0]
+
+    gth_results_path = f'{groundtruths_folder}{image_name}.txt'
+    det_results_path = f'{detections_folder}{image_name}.txt'
+
+    image_path = f'images/{image_name}.jpg'
+    img = cv2.imread(image_path)
+
+    # Draw table groundtruths on image:
+    with open(gth_results_path, 'r') as f:
+        for line in f:
+            color = (0, 255, 0)
+            _, x1, y1, x2, y2 = line.rstrip().split(' ')
+            cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
+
+    # Draw table detections on image:
+    with open(det_results_path, 'r') as f:
+        for line in f:
+            color = (0, 0, 255)
+            _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+            if float(conf) >= _DETECTION_THRESH:
+                cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
+
+    _, im_arr = cv2.imencode('.jpg', img)  # im_arr: image in Numpy one-dim array format.
+    im_bytes = im_arr.tobytes()
+    encoded_image = base64.b64encode(im_bytes)
+
+    # encoded_image = base64.b64encode(open(image_path, 'rb').read())
+    contents = 'data:image/png;base64,{}'.format(encoded_image.decode())
+    image = html.Img(
+        src=contents,
+        style={'height': '100%', 'width': '100%'}
+    )
+    return image
+
+@app.callback(
+    Output('modal', 'is_open'),
+    [Input('open_random_image', 'n_clicks'),
+     Input('close', 'n_clicks')],
+    [State('modal', 'is_open')]
+)
+def toggle_modal(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
 
 if __name__ == '__main__':
     app.run_server(debug=True)
