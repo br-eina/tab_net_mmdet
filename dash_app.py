@@ -328,7 +328,7 @@ def update_loss(selected_epoch, dataset_type, pretrained_model):
     fig = go.Figure()
     if selected_epoch != 36:
         iterations, loss = get_log_stat(selected_epoch, dataset_type, pretrained_model, 'loss')
-        fig = go.Figure(data=go.Scatter(x=iterations, y=loss))
+        fig = go.Figure(data=go.Scatter(x=iterations, y=loss, showlegend=False, hoverinfo='x+y'))
     fig.update_layout(title={'text': 'Loss',
                              'x': 0.5,
                              'yanchor': 'top'},
@@ -344,6 +344,20 @@ def update_loss(selected_epoch, dataset_type, pretrained_model):
 
     fig.update_xaxes(range=[iter_start, iter_end])
     fig.update_yaxes(range=[0, 1.08])
+
+    # Add epochs tracers:
+    for num_epoch in range(_DEF_TRAINING_EPOCHS):
+        x_epoch = iter_start + (iter_per_epoch * (num_epoch + 1))
+        fig.add_trace(
+            go.Scatter(
+                x=np.array([x_epoch, x_epoch]),
+                y=np.array([0, 1.5]),
+                mode='lines',
+                line=go.scatter.Line(color="#DF8600", dash='dash'),
+                showlegend=False
+            )
+        )
+
     return fig
 
 @app.callback(
@@ -373,6 +387,7 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
     fig.update_xaxes(range=[iter_start, iter_end])
     fig.update_yaxes(range=[0.85, 1.01])
 
+    # Add asymptote tracer:
     fig.add_trace(
         go.Scatter(
             x=np.array([iter_start, iter_end]),
@@ -382,6 +397,18 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
             showlegend=False
         )
     )
+    # Add epochs tracers:
+    for num_epoch in range(_DEF_TRAINING_EPOCHS):
+        x_epoch = iter_start + (iter_per_epoch * (num_epoch + 1))
+        fig.add_trace(
+            go.Scatter(
+                x=np.array([x_epoch, x_epoch]),
+                y=np.array([0, 1.5]),
+                mode='lines',
+                line=go.scatter.Line(color="#DF8600", dash='dash'),
+                showlegend=False
+            )
+        )
     return fig
 
 # Displaying selected image in modal_body Div:
@@ -432,7 +459,7 @@ def display_modal_image(pretrained_model, dataset_type, selected_epoch, image_ty
             if float(conf) >= _DETECTION_THRESH:
                 cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
 
-    _, im_arr = cv2.imencode('.jpg', img)  # im_arr: image in Numpy one-dim array format.
+    _, im_arr = cv2.imencode('.jpg', img)
     im_bytes = im_arr.tobytes()
     encoded_image = base64.b64encode(im_bytes)
 
