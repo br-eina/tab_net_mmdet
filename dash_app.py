@@ -328,12 +328,13 @@ def update_loss(selected_epoch, dataset_type, pretrained_model):
     fig = go.Figure()
     if selected_epoch != 36:
         iterations, loss = get_log_stat(selected_epoch, dataset_type, pretrained_model, 'loss')
-        fig = go.Figure(data=go.Scatter(x=iterations, y=loss, showlegend=False, hoverinfo='x+y'))
+        fig = go.Figure(data=go.Scatter(x=iterations, y=loss, name='loss', showlegend=False, hoverinfo='x+y'))
     fig.update_layout(title={'text': 'Loss',
                              'x': 0.5,
                              'yanchor': 'top'},
                       xaxis_title='Iterations',
-                      yaxis_title='Loss')
+                      yaxis_title='Loss',
+                      hovermode='x')
     iter_per_epoch = _DTYPE_ITERATIONS_PER_EPOCH[dataset_type]
 
     pretr_epochs = _PRETR_MODEL_EPOCHS[pretrained_model]
@@ -351,10 +352,11 @@ def update_loss(selected_epoch, dataset_type, pretrained_model):
         fig.add_trace(
             go.Scatter(
                 x=np.array([x_epoch, x_epoch]),
-                y=np.array([0, 1.5]),
+                y=np.array([0, 1]),
                 mode='lines',
                 line=go.scatter.Line(color="#DF8600", dash='dash'),
-                showlegend=False
+                showlegend=False,
+                hoverinfo='skip'
             )
         )
 
@@ -375,7 +377,8 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
                              'x': 0.5,
                              'yanchor': 'top'},
                       xaxis_title='Iterations',
-                      yaxis_title='Accuracy')
+                      yaxis_title='Accuracy',
+                      hovermode='x')
     iter_per_epoch = _DTYPE_ITERATIONS_PER_EPOCH[dataset_type]
 
     pretr_epochs = _PRETR_MODEL_EPOCHS[pretrained_model]
@@ -394,7 +397,8 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
             y=np.array([1, 1]),
             mode='lines',
             line=go.scatter.Line(color="gray", dash='dash'),
-            showlegend=False
+            showlegend=False,
+            hoverinfo='skip'
         )
     )
     # Add epochs tracers:
@@ -403,10 +407,11 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
         fig.add_trace(
             go.Scatter(
                 x=np.array([x_epoch, x_epoch]),
-                y=np.array([0, 1.5]),
+                y=np.array([0, 1]),
                 mode='lines',
                 line=go.scatter.Line(color="#DF8600", dash='dash'),
-                showlegend=False
+                showlegend=False,
+                hoverinfo='skip'
             )
         )
     return fig
