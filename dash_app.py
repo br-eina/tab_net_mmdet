@@ -163,14 +163,15 @@ app.layout = html.Div(children=[
                 )
             ],
             style={'padding': '15px',
-                   'background-color': '#F8F8FF'}
+                   'background-color': '#E5F0FF'}
             ),
             # Results:
             html.Div(children=[
                 html.H5('Model results:', style={'padding-left': '10px'}),
                 html.Div(id='table_results')
             ],
-            style={'padding': '5px'}
+            style={'padding': '10px',
+                   'background-color': '#F2F4F6'}
             )
         ],
         width={'size': 3, 'order': 1},
@@ -388,7 +389,7 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
     iter_end = total_epochs * iter_per_epoch
 
     fig.update_xaxes(range=[iter_start, iter_end])
-    fig.update_yaxes(range=[0.85, 1.01])
+    fig.update_yaxes(range=[0.91, 1.01])
 
     # Add asymptote tracer:
     fig.add_trace(
