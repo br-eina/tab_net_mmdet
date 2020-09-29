@@ -26,13 +26,11 @@ _DEF_TRAINING_EPOCHS = 6
 _ITER_STEP = 10
 _DETECTION_THRESH = 0.75
 
-_DF_METRICS_PATH = 'results/df_upd.pkl'
+_DF_METRICS_PATH = 'results/df.pkl'
 _DF_DOCTYPES_PATH = 'results/df_doctypes.pkl'
 
 df = pd.read_pickle(_DF_METRICS_PATH)
 df_doctypes = pd.read_pickle(_DF_DOCTYPES_PATH)
-
-# image_path = 'images/inv-0000.jpg'
 
 def get_log_stat(epoch, dataset_type, pretrained_model, stat):
     log_list = df[(df['pretrained_model'] == pretrained_model) & (df['epoch'] == epoch) & (df['evaluate'] == 'test') & (df['dataset_type'] == dataset_type)]['log'].values[0]
@@ -87,7 +85,7 @@ app.layout = html.Div(children=[
                     labelStyle={'display': 'block'}
                 )
             ],
-            style={'padding': '15px',
+            style={'padding': '10px',
                    'background-color': '#F8F8FF'}
             ),
             # Dataset type panel:
@@ -104,7 +102,7 @@ app.layout = html.Div(children=[
                     labelStyle={'display': 'block'}
                 )
             ],
-            style={'padding': '15px',
+            style={'padding': '10px',
                    'background-color': '#F8F8FF'}
             ),
             # Evaluate model:
@@ -121,7 +119,7 @@ app.layout = html.Div(children=[
                     labelStyle={'display': 'block'}
                 )
             ],
-            style={'padding': '15px',
+            style={'padding': '10px',
                    'background-color': '#F8F8FF'}
             ),
             # Modal:
@@ -165,6 +163,13 @@ app.layout = html.Div(children=[
             ],
             style={'padding': '15px',
                    'background-color': '#F8F8FF'}
+            ),
+            # Results:
+            html.Div(children=[
+                html.H5('Model results:', style={'padding-left': '10px'}),
+                html.Div(id='table_results')
+            ],
+            style={'padding': '5px'}
             )
         ],
         width={'size': 3, 'order': 1},
@@ -448,6 +453,41 @@ def toggle_modal(n1, n2, is_open):
     if n1 or n2:
         return not is_open
     return is_open
+
+@app.callback(
+    Output('table_results', 'children'),
+    [Input('pretr_model_radio', 'value'),
+     Input('dataset_type_radio', 'value'),
+     Input('epoch_slider', 'value')]
+)
+def update_results_table(pretrained_model, dataset_type, selected_epoch):
+    data_list = []
+    # Find best model (highest AP_unseen):
+    df_unseen = df[df['evaluate'] == 'unseen']
+    df_max_ap = df_unseen[(df_unseen['ap'] == df_unseen['ap'].max())]
+    df_current = df_unseen[(df_unseen['pretrained_model'] == pretrained_model) & (df_unseen['dataset_type'] == dataset_type) & (df_unseen['epoch'] == selected_epoch)]
+
+    for ind, dtf in enumerate([df_max_ap, df_current]):
+        data = dict()
+        if ind == 0:
+            data['status'] = 'best'
+        else:
+            data['status'] = 'current'
+        data['model'] = f'{dtf["pretrained_model"].values[0]}_' \
+                            f'{dtf["dataset_type"].values[0]}_' \
+                            f'{dtf["epoch"].values[0]}'
+        data['accuracy'] = round(dtf['accuracy'].values[0], 3)
+        data['loss'] = round(dtf['loss'].values[0], 3)
+        data['AP'] = round(dtf['ap'].values[0], 3)
+        data_list.append(data)
+    df_results = pd.DataFrame(data_list)
+    return dbc.Table.from_dataframe(
+        df=df_results,
+        hover=True,
+        striped=True,
+        bordered=True,
+        size='sm'
+    )
 
 if __name__ == '__main__':
     app.run_server(debug=True)
