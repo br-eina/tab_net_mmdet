@@ -139,6 +139,7 @@ app.layout = html.Div(children=[
                 dbc.Input(
                     id='specify_image_input',
                     placeholder='Specify invoice index...',
+                    debounce=True,
                     type='text',
                     style={'margin-bottom': '10px'}
                 ),
