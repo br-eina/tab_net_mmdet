@@ -128,7 +128,7 @@ app.layout = html.Div(children=[
             html.Div(children=[
                 html.H5('Table detection visualization:'),
                 dbc.RadioItems(
-                    id='random_image_type_selector',
+                    id='random_image_type_radio',
                     options=[
                         {'label': 'train', 'value': 'train'},
                         {'label': 'test', 'value': 'test'},
@@ -138,10 +138,18 @@ app.layout = html.Div(children=[
                     value='unseen',
                     style={'margin-bottom': '10px'}
                 ),
-                dbc.Button('Random image', id='open_random_image'),
+                dbc.Input(
+                    id='specify_image_input',
+                    placeholder='Specify invoice index...',
+                    type='text',
+                    style={'margin-bottom': '10px'}
+                ),
+                dbc.Button('Random/specified image', id='open_image_button'),
                 dbc.Modal(
                     [
-                        dbc.ModalHeader('Header'),
+                        dbc.ModalHeader(
+                            id='modal_header'
+                        ),
                         dbc.ModalBody(
                             html.Div(
                                 id='image'
@@ -253,7 +261,8 @@ def update_prec_rec(selected_epoch, eval_list, dataset_type, pretrained_model):
                             'x': 0.5,
                             'yanchor': 'top'},
                       xaxis_title='Recall',
-                      yaxis_title='Precision')
+                      yaxis_title='Precision',
+                      hovermode="x unified")
     fig.update_xaxes(range=[0, 1])
     fig.update_yaxes(range=[0.6, 1.05])
 
@@ -282,10 +291,25 @@ def update_pie_chart(dataset_type):
     for label in labels:
         values.append(poss_df_doctypes['img_type'].value_counts()[label])
 
-    fig = go.Figure(data=[go.Pie(labels=rus_labels, values=values)])
-    fig.update_layout(title={'text': 'Типы документов',
-                             'x': 0.5,
-                             'yanchor': 'top'})
+    fig = go.Figure(data=[go.Pie(labels=rus_labels, values=values, textinfo='label+percent')])
+    fig.update_layout(
+        title={
+            'text': 'Типы документов',
+            'x': 0.5,
+            'yanchor': 'top'
+        },
+        annotations=[
+            dict(
+                x=0.5,
+                y=-0.2,
+                showarrow=False,
+                text='Stratified split: 80% - на обучение, 20% - новые данные<br>Test/train stratified split: 80% / 20%',
+                xref='paper',
+                yref='paper',
+                font = {'size': 14}
+            )
+        ]
+    )
     return fig
 
 @app.callback(
@@ -326,7 +350,7 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
     fig = go.Figure()
     if selected_epoch != 36:
         iterations, accuracy = get_log_stat(selected_epoch, dataset_type, pretrained_model, 's0.acc')
-        fig = go.Figure(data=go.Scatter(x=iterations, y=accuracy/100))
+        fig = go.Figure(data=go.Scatter(x=iterations, y=accuracy/100, name='Accuracy', showlegend=False, hoverinfo='x+y'))
     fig.update_layout(title={'text': 'Accuracy',
                              'x': 0.5,
                              'yanchor': 'top'},
@@ -342,27 +366,44 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
 
     fig.update_xaxes(range=[iter_start, iter_end])
     fig.update_yaxes(range=[0.85, 1.01])
+
+    fig.add_trace(
+        go.Scatter(
+            x=np.array([iter_start, iter_end]),
+            y=np.array([1, 1]),
+            mode='lines',
+            line=go.scatter.Line(color="gray", dash='dash'),
+            showlegend=False
+        )
+    )
     return fig
 
 # Displaying selected image in modal_body Div:
 @app.callback(
-    Output('image', 'children'),
+    [Output('image', 'children'),
+     Output('modal_header', 'children')],
     [Input('pretr_model_radio', 'value'),
      Input('dataset_type_radio', 'value'),
      Input('epoch_slider', 'value'),
-     Input('random_image_type_selector', 'value'),
-     Input('open_random_image', 'n_clicks')]
+     Input('random_image_type_radio', 'value'),
+     Input('open_image_button', 'n_clicks'),
+     Input('specify_image_input', 'value')]
 )
-def display_modal_image(pretrained_model, dataset_type, selected_epoch, image_type, n_clicks):
+def display_modal_image(pretrained_model, dataset_type, selected_epoch, image_type, n_clicks, image_index):
     metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
     groundtruths_folder = f'{metrics_folder}/groundtruths_{image_type}/'
     detections_folder = f'{metrics_folder}/detections/{selected_epoch}/{image_type}/'
 
     imagenames_list = f'annotations/COCO_annotations/{dataset_type}/{image_type}_list.json'
 
-    with open(imagenames_list, 'r+') as f:
-        image_names = json.load(f)
-    image_name = choice(image_names).split('.')[0]
+    if image_index:
+        image_name = f'inv-{str(image_index)}'
+    else:
+        with open(imagenames_list, 'r+') as f:
+            image_names = json.load(f)
+        image_name = choice(image_names).split('.')[0]
+
+    modal_header = f'Invoice index: {image_name.split("-")[1]}'
 
     gth_results_path = f'{groundtruths_folder}{image_name}.txt'
     det_results_path = f'{detections_folder}{image_name}.txt'
@@ -395,11 +436,11 @@ def display_modal_image(pretrained_model, dataset_type, selected_epoch, image_ty
         src=contents,
         style={'height': '100%', 'width': '100%'}
     )
-    return image
+    return image, modal_header
 
 @app.callback(
     Output('modal', 'is_open'),
-    [Input('open_random_image', 'n_clicks'),
+    [Input('open_image_button', 'n_clicks'),
      Input('close', 'n_clicks')],
     [State('modal', 'is_open')]
 )
