@@ -1,4 +1,5 @@
 import base64
+import pickle
 import json
 from random import choice
 import numpy as np
@@ -10,6 +11,15 @@ import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 import cv2
+from tesserocr import PyTessBaseAPI, PSM
+from PIL import Image
+from table_blocks_det import (
+    utils,
+    detect_lines_symbols,
+    constr_rows,
+    constr_blocks,
+    detect_table
+)
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
@@ -54,7 +64,6 @@ def get_log_stat(epoch, dataset_type, pretrained_model, stat):
     iterations = np.arange(iter_start, iter_end, _ITER_STEP)
     stats = np.array(stat_list)
     return iterations, stats
-
 
 app.layout = html.Div(children=[
     # Main dashboard:
@@ -177,48 +186,111 @@ app.layout = html.Div(children=[
         width={'size': 3, 'order': 1},
         style={'align-content': 'flex-start'}
         ),
-        # Visualization
+        # Main section
         dbc.Col(children=[
-            # Row with 2 cols: Pie chart and Precision x Recall
-            dbc.Row(children=[
-                dbc.Col(
-                    dcc.Graph(
-                        id='pie_chart'
-                    )
-                ),
-                dbc.Col(
-                    dcc.Graph(
-                        id='prec_rec'
-                    )
-                )
-            ]),
-            # Row with loss and accuracy plots:
-            dbc.Row(children=[
-                dbc.Col(
-                    dcc.Graph(
-                        id='loss'
-                    )
-                ),
-                dbc.Col(
-                    dcc.Graph(
-                        id='accuracy'
-                    )
-                )
-            ]),
-            # Row with slider for epoches:
-            dbc.Row(
-                dbc.Col(children=[
-                    dcc.Slider(
-                        id='epoch_slider',
-                        step=None
-                    ),
-                    html.Div('epoches',
-                             style={'textAlign': 'center'})
+            dcc.Tabs(
+                children = [
+                    # Tab with training plots, dataset distribution and AP curve
+                    dcc.Tab(
+                        label='Training plots',
+                        children=[
+                            # Row with 2 cols: Pie chart and Precision x Recall
+                            dbc.Row(children=[
+                                dbc.Col(
+                                    dcc.Graph(
+                                        id='pie_chart'
+                                    )
+                                ),
+                                dbc.Col(
+                                    dcc.Graph(
+                                        id='prec_rec'
+                                    )
+                                )
+                            ]),
+                            # Row with loss and accuracy plots:
+                            dbc.Row(children=[
+                                dbc.Col(
+                                    dcc.Graph(
+                                        id='loss'
+                                    )
+                                ),
+                                dbc.Col(
+                                    dcc.Graph(
+                                        id='accuracy'
+                                    )
+                                )
+                            ]),
+                            # Row with slider for epoches:
+                            dbc.Row(
+                                dbc.Col(children=[
+                                    dcc.Slider(
+                                        id='epoch_slider',
+                                        step=None
+                                    ),
+                                    html.Div('epoches',
+                                            style={'textAlign': 'center'})
 
-                ],
-                width={'size': 7},
-                style={'margin': 'auto'}
-                )
+                                ],
+                                width={'size': 7},
+                                style={'margin': 'auto'}
+                                )
+                            )
+                        ]
+                    ),
+                    dcc.Tab(
+                        label='Recognition results',
+                        children=[
+                            html.Div(
+                                children=[
+                                    html.H5('OCR engine:', style={'padding-left': '10px'}),
+                                    dbc.RadioItems(
+                                        id='ocr_engine_radio',
+                                        options=[
+                                            {'label': 'Tesseract', 'value': 'tesseract'},
+                                            {'label': 'EasyOCR', 'value': 'easyocr'}
+                                        ],
+                                        inline=True,
+                                        value='tesseract',
+                                        style={'margin-bottom': '10px'}
+                                    ),
+                                    html.H5('Split to textblocks:', style={'padding-left': '10px'}),
+                                    dbc.RadioItems(
+                                        id='textblocks_radio',
+                                        options=[
+                                            {'label': 'Not', 'value': 'dont_split'},
+                                            {'label': 'Yes', 'value': 'split'}
+                                        ],
+                                        inline=True,
+                                        value='dont_split',
+                                        style={'margin-bottom': '10px'}
+                                    ),
+                                    html.H5('Text to recognize:', style={'padding-left': '10px'}),
+                                    dbc.RadioItems(
+                                        id='text_radio',
+                                        options=[
+                                            {'label': 'All text', 'value': 'text_all'},
+                                            {'label': 'Without tables', 'value': 'text_nontabular'},
+                                            {'label': 'Tables only', 'value': 'text_tabular'}
+                                        ],
+                                        inline=True,
+                                        value='text_all',
+                                        style={'margin-bottom': '10px'}
+                                    )
+                                ],
+                                style={'padding': '15px'}
+                            ),
+                            html.Div(
+                                id='text_content',
+                                style={
+                                    'white-space': 'pre-wrap',
+                                    'maxHeight': '700px',
+                                    'maxWidth': '1000px',
+                                    'overflow': 'scroll'
+                                }
+                            )
+                        ]
+                    )
+                ]
             )
         ],
         width={'size': 9, 'order': 12}
@@ -287,9 +359,9 @@ def update_pie_chart(dataset_type):
     elif dataset_type == 'type_opl':
         poss_types = ['opl']
 
-    map_dict = {'misc': 'Другое',
-                'opl': 'Счета на оплату',
-                'fact': 'Счета-фактуры'}
+    map_dict = {'misc': 'Other',
+                'opl': 'Payment reports',
+                'fact': 'Invoices'}
 
     poss_df_doctypes = df_doctypes[df_doctypes['img_type'].isin(poss_types)]
     labels = poss_types
@@ -298,19 +370,22 @@ def update_pie_chart(dataset_type):
     for label in labels:
         values.append(poss_df_doctypes['img_type'].value_counts()[label])
 
-    fig = go.Figure(data=[go.Pie(labels=rus_labels, values=values, textinfo='label+percent')])
+    fig = go.Figure(data=[go.Pie(labels=rus_labels, values=values, textinfo='value+percent')])
     fig.update_layout(
         title={
-            'text': 'Типы документов',
+            'text': 'Document types',
             'x': 0.5,
-            'yanchor': 'top'
+            'yanchor': 'top',
+            'font_size': 25
         },
+        legend_font_size = 20,
+        font_size = 22,
         annotations=[
             dict(
                 x=0.5,
                 y=-0.2,
                 showarrow=False,
-                text='Stratified split: 80% - на обучение, 20% - новые данные<br>Test/train stratified split: 80% / 20%',
+                text='Stratified split: 80% - \\learning data , 20% - \\unseen data <br>Test/train stratified split: 80% / 20%',
                 xref='paper',
                 yref='paper',
                 font = {'size': 14}
@@ -523,5 +598,131 @@ def update_results_table(pretrained_model, dataset_type, selected_epoch):
         size='sm'
     )
 
+# Display recognized text
+@app.callback(
+    Output('text_content', 'children'),
+    [Input('pretr_model_radio', 'value'),
+     Input('dataset_type_radio', 'value'),
+     Input('epoch_slider', 'value'),
+     Input('random_image_type_radio', 'value'),
+     Input('ocr_engine_radio', 'value'),
+     Input('textblocks_radio', 'value'),
+     Input('text_radio', 'value'),
+     Input('specify_image_input', 'value')]
+)
+def display_recognized_text(pretrained_model, dataset_type, selected_epoch, image_type,
+                            ocr_engine, textblocks_split, text_type, image_index):
+    if image_index:
+        image_name = f'inv-{str(image_index)}'
+        image_path = f'images/{image_name}.jpg'
+        img = cv2.imread(image_path)
+
+        # Run scripts for textblocks if determined:
+        if textblocks_split == 'split':
+            detect_lines_symbols.main(image_name, image_path)
+            constr_rows.main(image_name, image_path)
+            constr_blocks.main(image_name, image_path)
+            folder_data = 'table_blocks_det/data'
+            text_blocks = utils.load_data(f'{folder_data}/text_blocks_{image_name}.data')
+
+        if text_type == 'text_all':
+            with PyTessBaseAPI(lang='rus') as tesseract:
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                image = Image.fromarray(img_rgb)
+                tesseract.SetImage(image)
+                text = tesseract.GetUTF8Text()
+            return text
+
+        if text_type == 'text_tabular':
+            content = str()
+            metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
+            detections_folder = f'{metrics_folder}/detections/{selected_epoch}/{image_type}/'
+            det_results_path = f'{detections_folder}{image_name}.txt'
+            if textblocks_split == 'dont_split':
+                with open(det_results_path, 'r') as f:
+                    i = 1
+                    for line in f:
+                        _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+                        if float(conf) >= _DETECTION_THRESH:
+                            table_img = img[int(y1):int(y2), int(x1):int(x2)]
+                            with PyTessBaseAPI(lang='rus') as tesseract:
+                                img_rgb = cv2.cvtColor(table_img, cv2.COLOR_BGR2RGB)
+                                image = Image.fromarray(img_rgb)
+                                tesseract.SetImage(image)
+                                text = f'Table {i}:\n\n' + tesseract.GetUTF8Text()
+                                content += text
+                                i += 1
+            elif textblocks_split == 'split':
+                tables = []
+                with open(det_results_path, 'r') as f:
+                    for line in f:
+                        _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+                        if float(conf) >= _DETECTION_THRESH:
+                            table = {'x': int(x1), 'y': int(y1), 'w': int(x2)-int(x1), 'h': int(y2)-int(y1)}
+                            tables.append(table)
+                detect_table.set_textblocks_table_param(text_blocks, tables)
+
+                for ind_row, row in enumerate(text_blocks):
+                    content_row = str()
+                    for textblock in row:
+                        if textblock['in_table'] == True:
+                            x1, x2 = textblock['x'], textblock['x'] + textblock['w']
+                            y1, y2 = textblock['y'], textblock['y'] + textblock['h']
+                            textblock_img = img[y1:y2, x1:x2]
+                            with PyTessBaseAPI(lang='rus', psm=PSM.SINGLE_BLOCK) as tesseract:
+                                img_rgb = cv2.cvtColor(textblock_img, cv2.COLOR_BGR2RGB)
+                                image = Image.fromarray(img_rgb)
+                                tesseract.SetImage(image)
+                                text = tesseract.GetUTF8Text()
+                                content_row += text + '  '
+                    content += content_row + '\n'
+            return content
+
+        if text_type == 'text_nontabular':
+            metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
+            detections_folder = f'{metrics_folder}/detections/{selected_epoch}/{image_type}/'
+            det_results_path = f'{detections_folder}{image_name}.txt'
+            if textblocks_split == 'dont_split':
+                with open(det_results_path, 'r') as f:
+                    i = 1
+                    for line in f:
+                        _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+                        if float(conf) >= _DETECTION_THRESH:
+                            img[int(y1):int(y2), int(x1):int(x2)] = 0
+
+                with PyTessBaseAPI(lang='rus') as tesseract:
+                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    image = Image.fromarray(img_rgb)
+                    tesseract.SetImage(image)
+                    text = tesseract.GetUTF8Text()
+                return text
+
+            elif textblocks_split == 'split':
+                content = str()
+                tables = []
+                with open(det_results_path, 'r') as f:
+                    for line in f:
+                        _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+                        if float(conf) >= _DETECTION_THRESH:
+                            table = {'x': int(x1), 'y': int(y1), 'w': int(x2)-int(x1), 'h': int(y2)-int(y1)}
+                            tables.append(table)
+                detect_table.set_textblocks_table_param(text_blocks, tables)
+
+                for ind_row, row in enumerate(text_blocks):
+                    content_row = str()
+                    for textblock in row:
+                        if textblock['in_table'] == False:
+                            x1, x2 = textblock['x'], textblock['x'] + textblock['w']
+                            y1, y2 = textblock['y'], textblock['y'] + textblock['h']
+                            textblock_img = img[y1:y2, x1:x2]
+                            with PyTessBaseAPI(lang='rus', psm=PSM.SINGLE_BLOCK) as tesseract:
+                                img_rgb = cv2.cvtColor(textblock_img, cv2.COLOR_BGR2RGB)
+                                image = Image.fromarray(img_rgb)
+                                tesseract.SetImage(image)
+                                text = tesseract.GetUTF8Text()
+                                content_row += text + ' '
+                    content += content_row + '\n'
+                return content
+
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(host='0.0.0.0', port=8050, debug=True)
