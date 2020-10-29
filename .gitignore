@@ -26,3 +26,9 @@ results/metrics/*
 # Exclude test files:
 parse_config.ipynb
 .ipynb_checkpoints/*
+test_tesser.py
+ap values plot.ipynb
+
+# Exclude table_blocks_det data and res files:
+table_blocks_det/data/
+table_blocks_det/results/
