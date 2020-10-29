@@ -1,3 +1,13 @@
+# Fine-tune mmdetection model for table detection on document images
+
+## Introduction
+This project provides a pipeline to perform fine-tuning of pre-trained models for object detection. Currently it is specified on detecting tables on document images.
+
+This project is based on [MMDetection v1.2](https://github.com/open-mmlab/mmdetection/tree/v1.2.0) open-source framework for convinient neural detection models construction. It requires CUDA and GPUs with high performance. [Colab Google service](https://colab.research.google.com/) is used to create a cloud environment to avoid the case if there are no expensive GPUs on local machine.
+
+[CascadeTabNet project](https://github.com/DevashishPrasad/CascadeTabNet) config file and pre-trained models are used as base models to perform fine-tuning on.
+
+
 You must have a **tab_net/** directory in Google Drive.
 
 **tab_net/** folder structure:
@@ -23,14 +33,14 @@ Pattern of document images filenames: **inv-XXXX.jpg** (**inv-0000.jpg**, etc.).
 - Draw rectangles around each table on your dataset.
 2. Annotate type of document images:
 - Open VGG_Image Annotator from **annotations/annotators/** project folder;
-- **File attributes: "img_type": ["opl", "fact", "misc"]**
+- **File attributes: "img_type": ["opl", "fact", "misc"]** (specify your own if necessary);
 - Annotate only file_attributes according to the document type;
 - **Annotations -> Export Annotations (as json)** to the **annotations/** project folder as *vgg_json.json*.
 
 ## 3. Convert VOC annotations to COCO format:
 MMDetection config models work with annotations in COCO format, so you have to convert annotations from сlause 2.1.
 
-**VOC_to_COCO** script is based on D. Prasad script for convertation of Pascal VOC XML annotation files to a single COCO Json file. Refer to section **8. Training** of [CascadeTabNet project](https://github.com/DevashishPrasad/CascadeTabNet).
+**VOC_to_COCO** script is based on D. Prasad script for convertation of Pascal VOC XML annotation files to a single COCO Json file. Refer to section **8. Training** of [CascadeTabNet project](https://github.com/DevashishPrasad/CascadeTabNet#8-training).
 
 **VOC_to_COCO** script was modified to perform *train/test/unseen* split of your dataset apart from convertation. Model will validate only on *test* split, so *unseen* images can be used as evaluation on unkown data.
 
@@ -57,7 +67,7 @@ All training process is done with Colab service. Colab is strongly integrated wi
 Training is done through the Colab notebook with Google GPUs.
 1. Launch **tab_net_finetuning.ipynb** as Colab notebook;
 2. First cell installs required environment. Restart the runtime after this step;
-3. Then launch **Define desired parameters** cell. Change **pretrained_model**, **dataset_type** or **total_epoches** if necessary;
+3. Then launch **Define desired parameters** cell. Change **pretrained_model**, **dataset_type** or **total_epoches** if necessary. Also you have to find out the number of epoches, during which provided **pretrained_model** was trained/finetuned. Specify that number in **pretr_model_epochs** dictionary;
 4. Launch **Train a model** cell. Checkpoints for each epoch will be stored in **training/{pretrained_model}/{dataset_type}/workdir/** Google Drive folder.
 5. Launch cells from **Save predictions to JSON** section;
 6. Model results and training log will be stored in **results/** Google Drive folder as JSON file;
