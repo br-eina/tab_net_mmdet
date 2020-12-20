@@ -1,0 +1,10 @@
+numpy
+pandas
+plotly
+dash
+dash-renderer
+dash-core-components
+dash-html-components
+dash-bootstrap-components
+opencv
+tesserocr
