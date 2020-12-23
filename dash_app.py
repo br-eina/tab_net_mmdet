@@ -18,7 +18,8 @@ from table_blocks_det import (
     detect_lines_symbols,
     constr_rows,
     constr_blocks,
-    detect_table
+    detect_table,
+    table_recognition
 )
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -35,9 +36,10 @@ _PRETR_MODEL_EPOCHS = {
 _DEF_TRAINING_EPOCHS = 6
 _ITER_STEP = 10
 _DETECTION_THRESH = 0.75
+_DET_THR_PX = 10
 
-_DF_METRICS_PATH = 'results/df.pkl'
-_DF_DOCTYPES_PATH = 'results/df_doctypes.pkl'
+_DF_METRICS_PATH = './results/df.pkl'
+_DF_DOCTYPES_PATH = './results/df_doctypes.pkl'
 
 df = pd.read_pickle(_DF_METRICS_PATH)
 df_doctypes = pd.read_pickle(_DF_DOCTYPES_PATH)
@@ -242,6 +244,14 @@ app.layout = html.Div(children=[
                         children=[
                             html.Div(
                                 children=[
+                                    html.H5('Table debug', style={'padding-left': '10px'}),
+                                    html.Div(
+                                        children=[
+                                            dbc.Button('Cropped tables', id='cropped_tables_button'),
+                                            dbc.Button('Tables masks', id='tables_masks_button'),
+                                        ],
+                                        style={'display': 'inline-block'}
+                                    ),
                                     html.H5('OCR engine:', style={'padding-left': '10px'}),
                                     dbc.RadioItems(
                                         id='ocr_engine_radio',
@@ -501,14 +511,19 @@ def update_accuracy(selected_epoch, dataset_type, pretrained_model):
      Input('epoch_slider', 'value'),
      Input('random_image_type_radio', 'value'),
      Input('open_image_button', 'n_clicks'),
+     Input('cropped_tables_button', 'n_clicks'),
+     Input('tables_masks_button', 'n_clicks'),
      Input('specify_image_input', 'value')]
 )
-def display_modal_image(pretrained_model, dataset_type, selected_epoch, image_type, n_clicks, image_index):
-    metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
-    groundtruths_folder = f'{metrics_folder}/groundtruths_{image_type}/'
-    detections_folder = f'{metrics_folder}/detections/{selected_epoch}/{image_type}/'
+def display_modal_image(
+    pretrained_model, dataset_type, selected_epoch, image_type,
+    btn_image, btn_cropped_table, btn_table_mask, image_index
+):
+    metrics_folder = f'./object_detection_metrics/{pretrained_model}/{dataset_type}/'
+    groundtruths_folder = f'./{metrics_folder}/groundtruths_{image_type}/'
+    detections_folder = f'./{metrics_folder}/detections/{selected_epoch}/{image_type}/'
 
-    imagenames_list = f'annotations/COCO_annotations/{dataset_type}/{image_type}_list.json'
+    imagenames_list = f'./annotations/COCO_annotations/{dataset_type}/{image_type}_list.json'
 
     if image_index:
         image_name = f'inv-{str(image_index)}'
@@ -524,42 +539,75 @@ def display_modal_image(pretrained_model, dataset_type, selected_epoch, image_ty
 
     image_path = f'images/{image_name}.jpg'
     img = cv2.imread(image_path)
-
-    # Draw table groundtruths on image:
-    with open(gth_results_path, 'r') as f:
-        for line in f:
-            color = (0, 255, 0)
-            _, x1, y1, x2, y2 = line.rstrip().split(' ')
-            cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
-
-    # Draw table detections on image:
-    with open(det_results_path, 'r') as f:
-        for line in f:
-            color = (0, 0, 255)
-            _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
-            if float(conf) >= _DETECTION_THRESH:
+    images = []
+    changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+    if 'open_image_button' in changed_id:
+        # Draw table groundtruths on image:
+        with open(gth_results_path, 'r') as f:
+            for line in f:
+                color = (0, 255, 0)
+                _, x1, y1, x2, y2 = line.rstrip().split(' ')
                 cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
 
-    _, im_arr = cv2.imencode('.jpg', img)
-    im_bytes = im_arr.tobytes()
-    encoded_image = base64.b64encode(im_bytes)
+        # Draw table detections on image:
+        with open(det_results_path, 'r') as f:
+            for line in f:
+                color = (0, 0, 255)
+                _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+                if float(conf) >= _DETECTION_THRESH:
+                    cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
+        images.append(img)
+    elif 'cropped_tables_button' in changed_id:
+        # Get table detection:
+        with open(det_results_path, 'r') as f:
+            for line in f:
+                color = (0, 0, 255)
+                _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+                if float(conf) >= _DETECTION_THRESH:
+                    images.append(img[int(y1)-_DET_THR_PX:int(y2)+_DET_THR_PX, int(x1)-_DET_THR_PX:int(x2)+_DET_THR_PX].copy())
+    elif 'tables_masks_button' in changed_id:
+        # Get table detection:
+        tables = []
+        with open(det_results_path, 'r') as f:
+            for line in f:
+                color = (0, 0, 255)
+                _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+                if float(conf) >= _DETECTION_THRESH:
+                    tables.append(img[int(y1)-_DET_THR_PX:int(y2)+_DET_THR_PX, int(x1)-_DET_THR_PX:int(x2)+_DET_THR_PX].copy())
+        for table in tables:
+            tab = table_recognition.main(img, table)
+            images.append(tab.get_mask())
 
-    # encoded_image = base64.b64encode(open(image_path, 'rb').read())
-    contents = 'data:image/png;base64,{}'.format(encoded_image.decode())
-    image = html.Img(
-        src=contents,
-        style={'height': '100%', 'width': '100%'}
-    )
-    return image, modal_header
+    output_html_images = []
+    for img in images:
+        _, im_arr = cv2.imencode('.jpg', img)
+        im_bytes = im_arr.tobytes()
+        encoded_image = base64.b64encode(im_bytes)
+
+        # encoded_image = base64.b64encode(open(image_path, 'rb').read())
+        contents = 'data:image/png;base64,{}'.format(encoded_image.decode())
+        image = html.Img(
+            src=contents,
+            style={'height': '100%', 'width': '100%'}
+        )
+        output_html_images.append(image)
+    return output_html_images, modal_header
+
 
 @app.callback(
     Output('modal', 'is_open'),
     [Input('open_image_button', 'n_clicks'),
+     Input('cropped_tables_button', 'n_clicks'),
+     Input('tables_masks_button', 'n_clicks'),
      Input('close', 'n_clicks')],
     [State('modal', 'is_open')]
 )
-def toggle_modal(n1, n2, is_open):
-    if n1 or n2:
+def toggle_modal(btn1, btn2, btn3, btn_close, is_open):
+    if btn1 or btn_close:
+        return not is_open
+    elif btn2 or btn_close:
+        return not is_open
+    elif btn3 or btn_close:
         return not is_open
     return is_open
 
@@ -633,55 +681,114 @@ def display_recognized_text(pretrained_model, dataset_type, selected_epoch, imag
                 text = tesseract.GetUTF8Text()
             return text
 
-        if text_type == 'text_tabular':
-            content = str()
-            metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
-            detections_folder = f'{metrics_folder}/detections/{selected_epoch}/{image_type}/'
-            det_results_path = f'{detections_folder}{image_name}.txt'
-            if textblocks_split == 'dont_split':
-                with open(det_results_path, 'r') as f:
-                    i = 1
-                    for line in f:
-                        _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
-                        if float(conf) >= _DETECTION_THRESH:
-                            table_img = img[int(y1):int(y2), int(x1):int(x2)]
-                            with PyTessBaseAPI(lang='rus') as tesseract:
-                                img_rgb = cv2.cvtColor(table_img, cv2.COLOR_BGR2RGB)
-                                image = Image.fromarray(img_rgb)
-                                tesseract.SetImage(image)
-                                text = f'Table {i}:\n\n' + tesseract.GetUTF8Text()
-                                content += text
-                                i += 1
-            elif textblocks_split == 'split':
-                tables = []
-                with open(det_results_path, 'r') as f:
-                    for line in f:
-                        _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
-                        if float(conf) >= _DETECTION_THRESH:
-                            table = {'x': int(x1), 'y': int(y1), 'w': int(x2)-int(x1), 'h': int(y2)-int(y1)}
-                            tables.append(table)
-                detect_table.set_textblocks_table_param(text_blocks, tables)
 
-                for ind_row, row in enumerate(text_blocks):
-                    content_row = str()
-                    for textblock in row:
-                        if textblock['in_table'] == True:
-                            x1, x2 = textblock['x'], textblock['x'] + textblock['w']
-                            y1, y2 = textblock['y'], textblock['y'] + textblock['h']
-                            textblock_img = img[y1:y2, x1:x2]
-                            with PyTessBaseAPI(lang='rus', psm=PSM.SINGLE_BLOCK) as tesseract:
-                                img_rgb = cv2.cvtColor(textblock_img, cv2.COLOR_BGR2RGB)
-                                image = Image.fromarray(img_rgb)
-                                tesseract.SetImage(image)
-                                text = tesseract.GetUTF8Text()
-                                content_row += text + '  '
-                    content += content_row + '\n'
-            return content
+        if text_type == 'text_tabular':
+            metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
+            detections_folder = f'./{metrics_folder}/detections/{selected_epoch}/{image_type}/'
+            det_results_path = f'./{detections_folder}{image_name}.txt'
+            tables = []
+            html_tables = []
+            with open(det_results_path, 'r') as f:
+                for line in f:
+                    _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+                    if float(conf) >= _DETECTION_THRESH:
+                        tables.append(img[int(y1)-_DET_THR_PX:int(y2)+_DET_THR_PX, int(x1)-_DET_THR_PX:int(x2)+_DET_THR_PX].copy())
+            for table in tables:
+                tab = table_recognition.main(img, table)
+                html_tables.append(html.Table(
+                    className='table',
+                    children=[html.Tr([html.Td(cell.recognize_text(table), rowSpan=cell.row_span, colSpan=cell.col_span) for cell in row]) for row in tab.table],
+                    style={'rules':'all'}
+                    # style_cell={ 'border': '1px solid grey' }
+                )
+                )
+            # for row in tab.table:
+            #     for cell in row:
+            #         cell.show_cell_on_table()
+
+    # elif 'tables_masks_button' in changed_id:
+    #     # Get table detection: children=[html.Tr([html.Td('1') for j in range(2)]) for i in range(4)]
+    #     tables = []
+    #     with open(det_results_path, 'r') as f:
+    #         for line in f:
+    #             color = (0, 0, 255)
+    #             _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+    #             if float(conf) >= _DETECTION_THRESH:
+    #                 tables.append(img[int(y1)-_DET_THR_PX:int(y2)+_DET_THR_PX, int(x1)-_DET_THR_PX:int(x2)+_DET_THR_PX].copy())
+    #     for table in tables:
+    #         tab = table_recognition.main(img, table)
+    #         images.append(tab.get_mask())
+
+
+            table1 = html.Table(className='table',
+                children =
+                [
+                    html.Tr( [html.Td('OS', colSpan=2)] ),
+                    html.Tr( [html.Td('OS'),         html.Td('fsfsf')] ),
+                    html.Tr( [html.Td('OS'),         html.Td('fsfsf')] ),
+                    html.Tr( [html.Td('OS'),         html.Td('fsfsf')] ),
+                    html.Tr( [html.Td('OS'),         html.Td('fsfsf')] )
+                ]
+            ),
+
+            test_table = html.Table(
+                className='table',
+                children=[html.Tr([html.Td('1') for j in range(2)]) for i in range(4)]
+            )
+
+            # tab = table_recognition().main()
+
+            return html_tables
+
+        # if text_type == 'text_tabular':
+        #     content = str()
+        #     metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
+        #     detections_folder = f'./{metrics_folder}/detections/{selected_epoch}/{image_type}/'
+        #     det_results_path = f'./{detections_folder}{image_name}.txt'
+        #     if textblocks_split == 'dont_split':
+        #         with open(det_results_path, 'r') as f:
+        #             i = 1
+        #             for line in f:
+        #                 _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+        #                 if float(conf) >= _DETECTION_THRESH:
+        #                     table_img = img[int(y1):int(y2), int(x1):int(x2)]
+        #                     with PyTessBaseAPI(lang='rus') as tesseract:
+        #                         img_rgb = cv2.cvtColor(table_img, cv2.COLOR_BGR2RGB)
+        #                         image = Image.fromarray(img_rgb)
+        #                         tesseract.SetImage(image)
+        #                         text = f'Table {i}:\n\n' + tesseract.GetUTF8Text()
+        #                         content += text
+        #                         i += 1
+        #     elif textblocks_split == 'split':
+        #         tables = []
+        #         with open(det_results_path, 'r') as f:
+        #             for line in f:
+        #                 _, conf, x1, y1, x2, y2 = line.rstrip().split(' ')
+        #                 if float(conf) >= _DETECTION_THRESH:
+        #                     table = {'x': int(x1), 'y': int(y1), 'w': int(x2)-int(x1), 'h': int(y2)-int(y1)}
+        #                     tables.append(table)
+        #         detect_table.set_textblocks_table_param(text_blocks, tables)
+
+        #         for ind_row, row in enumerate(text_blocks):
+        #             content_row = str()
+        #             for textblock in row:
+        #                 if textblock['in_table'] == True:
+        #                     x1, x2 = textblock['x'], textblock['x'] + textblock['w']
+        #                     y1, y2 = textblock['y'], textblock['y'] + textblock['h']
+        #                     textblock_img = img[y1:y2, x1:x2]
+        #                     with PyTessBaseAPI(lang='rus', psm=PSM.SINGLE_BLOCK) as tesseract:
+        #                         img_rgb = cv2.cvtColor(textblock_img, cv2.COLOR_BGR2RGB)
+        #                         image = Image.fromarray(img_rgb)
+        #                         tesseract.SetImage(image)
+        #                         text = tesseract.GetUTF8Text()
+        #                         content_row += text + '  '
+        #             content += content_row + '\n'
+        #     return content
 
         if text_type == 'text_nontabular':
-            metrics_folder = f'object_detection_metrics/{pretrained_model}/{dataset_type}/'
-            detections_folder = f'{metrics_folder}/detections/{selected_epoch}/{image_type}/'
-            det_results_path = f'{detections_folder}{image_name}.txt'
+            metrics_folder = f'./object_detection_metrics/{pretrained_model}/{dataset_type}/'
+            detections_folder = f'./{metrics_folder}/detections/{selected_epoch}/{image_type}/'
+            det_results_path = f'./{detections_folder}{image_name}.txt'
             if textblocks_split == 'dont_split':
                 with open(det_results_path, 'r') as f:
                     i = 1
