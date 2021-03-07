@@ -159,3 +159,19 @@ def detect_text_elements(stats, avg_height, prop_wh=10,
 
             text_stats.append(stat)
     return text_stats
+
+
+def highlight_lines(mask, struct_el):
+    """Highlight lines on the mask
+
+        Args:
+            mask (np.array): binary mask
+            struct_el (np.array): structuring element for forms highlighting
+
+        Returns:
+            lines_mask (np.array): lines of specified form
+
+    """
+    lines_mask = cv2.erode(mask, struct_el) # erosion: object size decreases
+    lines_mask = cv2.dilate(lines_mask, struct_el) # dilation: object size increases
+    return lines_mask
