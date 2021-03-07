@@ -5,6 +5,7 @@
 # Exclude insides of images/ folder:
 images/*
 !images/README.md
+images_by_class
 
 # Exclude insides of annotators folder:
 annotations/annotators/Label_IMG_Annotator/*
@@ -28,6 +29,10 @@ parse_config.ipynb
 .ipynb_checkpoints/*
 test_tesser.py
 ap values plot.ipynb
+image_test.jpg
+table1.jpg
+table2.jpg
+table2.html
 
 # Exclude table_blocks_det data and res files:
 table_blocks_det/data/
