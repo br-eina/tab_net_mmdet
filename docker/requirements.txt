@@ -8,3 +8,4 @@ dash-html-components
 dash-bootstrap-components
 opencv
 tesserocr
+gunicorn
